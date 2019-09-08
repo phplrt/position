@@ -9,22 +9,18 @@ declare(strict_types=1);
 
 namespace Phplrt\Position;
 
-use Phplrt\Contracts\Source\Exception\NotReadableExceptionInterface;
-use Phplrt\Contracts\Source\ReadableInterface;
-
 /**
  * Trait FactoryTrait
  */
 trait FactoryTrait
 {
     /**
-     * @param ReadableInterface $sources
+     * @param string|resource $source
      * @param int $line
      * @param int $column
      * @return Position
-     * @throws NotReadableExceptionInterface
      */
-    public static function fromPosition(ReadableInterface $sources, int $line = 1, int $column = 1): Position
+    public static function fromPosition($source, int $line = 1, int $column = 1): Position
     {
         \assert($line >= Position::MIN_LINE, 'Line argument should be greater than 1');
         \assert($column >= Position::MIN_COLUMN, 'Column argument should be greater than 1');
@@ -34,7 +30,7 @@ trait FactoryTrait
             return static::start();
         }
 
-        $stream = $sources->getStream();
+        $stream = self::toStream($source);
         $offset = $cursor = 0;
 
         //
@@ -70,31 +66,49 @@ trait FactoryTrait
     }
 
     /**
-     * @param ReadableInterface $readable
-     * @return Position
-     * @throws NotReadableExceptionInterface
+     * @param resource|string $source
+     * @return resource
      */
-    public static function end(ReadableInterface $readable): Position
+    private static function toStream($source)
     {
-        return static::fromOffset($readable, \strlen($readable->getContents()));
+        switch (true) {
+            case \is_string($source):
+                \file_put_contents($resource = \fopen('php://memory', 'rb+'), $source);
+
+                return $resource;
+
+            case \is_resource($source):
+                return $source;
+
+            default:
+                $error = 'A source argument should be a resource or string type, but %s given';
+                throw new \TypeError(\sprintf($error, \gettype($source)));
+        }
     }
 
     /**
-     * @param ReadableInterface $file
+     * @param $source
+     * @return Position
+     */
+    public static function end($source): Position
+    {
+        return static::fromOffset($source, \strlen(self::toString($source)));
+    }
+
+    /**
+     * @param string|resource $source
      * @param int $offset
      * @return Position
-     * @throws NotReadableExceptionInterface
      */
-    public static function fromOffset(ReadableInterface $file, int $offset = 0): Position
+    public static function fromOffset($source, int $offset = 0): Position
     {
         \assert($offset >= Position::MIN_OFFSET, 'Offset argument should be greater or equal than 0');
-
 
         if ($offset === Position::MIN_OFFSET) {
             return static::start();
         }
 
-        $sources = \fread($file->getStream(), $offset);
+        $sources = \substr(self::toString($source), 0, $offset);
 
         //
         // Format the offset so that it does not exceed the allowable text
@@ -116,5 +130,24 @@ trait FactoryTrait
         }
 
         return new Position($offset, $lines, $column);
+    }
+
+    /**
+     * @param resource|string $source
+     * @return string
+     */
+    private static function toString($source): string
+    {
+        switch (true) {
+            case \is_resource($source):
+                return \stream_get_contents($source);
+
+            case \is_string($source):
+                return $source;
+
+            default:
+                $error = 'A source argument should be a resource or string type, but %s given';
+                throw new \TypeError(\sprintf($error, \gettype($source)));
+        }
     }
 }
