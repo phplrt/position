@@ -3,7 +3,16 @@
     "type": "library",
     "description": "The phplrt position package.",
     "license": "MIT",
-    "keywords": ["analyzing", "visualization", "input", "position", "line", "column", "offset", "utils"],
+    "keywords": [
+        "analyzing",
+        "visualization",
+        "input",
+        "position",
+        "line",
+        "column",
+        "offset",
+        "utils"
+    ],
     "homepage": "https://github.com/phplrt",
     "support": {
         "issues": "https://github.com/phplrt/phplrt/issues",
