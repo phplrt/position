@@ -35,7 +35,7 @@
         }
     },
     "provide": {
-        "phplrt/position-contracts-implementation": "^3.0"
+        "phplrt/position-contracts-implementation": "^3.2"
     },
     "extra": {
         "branch-alias": {
