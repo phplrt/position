@@ -1,12 +1,5 @@
 <?php
 
-/**
- * This file is part of phplrt package.
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 declare(strict_types=1);
 
 namespace Phplrt\Position;
@@ -38,25 +31,16 @@ final class Interval implements IntervalInterface
         $this->to = $to;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getFrom(): PositionInterface
     {
         return $this->from;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getTo(): PositionInterface
     {
         return $this->to;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getLength(): int
     {
         return \max(0, \abs($this->to->getOffset() - $this->from->getOffset()));

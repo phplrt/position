@@ -1,12 +1,5 @@
 <?php
 
-/**
- * This file is part of phplrt package.
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 declare(strict_types=1);
 
 namespace Phplrt\Position;
@@ -52,25 +45,16 @@ final class Position implements PositionInterface
         $this->column = \max($column, static::MIN_COLUMN);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getOffset(): int
     {
         return $this->offset;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getLine(): int
     {
         return $this->line;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getColumn(): int
     {
         return $this->column;
