@@ -35,7 +35,7 @@ trait PositionFactoryTrait
         // Calculate the number of bytes that the transmitted
         // number of lines takes.
         //
-        while (! \feof($stream) && $cursor++ + 1 < $line) {
+        while (!\feof($stream) && $cursor++ + 1 < $line) {
             $offset += \strlen((string)\fgets($stream));
         }
 
@@ -81,8 +81,6 @@ trait PositionFactoryTrait
 
     /**
      * @param ReadableInterface|string|resource|mixed $source
-     * @param int $offset
-     * @return PositionInterface
      * @throws NotAccessibleException
      * @throws \RuntimeException
      */
@@ -124,7 +122,6 @@ trait PositionFactoryTrait
 
     /**
      * @param ReadableInterface|string|resource|mixed $source
-     * @return int
      * @throws NotAccessibleException
      * @throws \RuntimeException
      */
