@@ -2,21 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Phplrt\Position\Tests;
+namespace Phplrt\Position\Tests\Unit;
 
 use Phplrt\Position\Position;
-use PHPUnit\Framework\ExpectationFailedException;
-use Phplrt\Source\Exception\NotAccessibleException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 
-class ColumnsTestCase extends TestCase
+#[Group('phplrt/position'), Group('unit')]
+class ColumnsTest extends TestCase
 {
-    /**
-     * @dataProvider provider
-     * @param string $text
-     * @throws ExpectationFailedException
-     * @throws NotAccessibleException
-     * @throws \RuntimeException
-     */
+    #[DataProvider('provider')]
     public function testOffsetOverflow(string $text): void
     {
         $position = Position::fromOffset($text, \PHP_INT_MAX);
@@ -24,13 +19,7 @@ class ColumnsTestCase extends TestCase
         $this->assertSame(1, $position->getColumn());
     }
 
-    /**
-     * @dataProvider provider
-     * @param string $text
-     * @throws ExpectationFailedException
-     * @throws NotAccessibleException
-     * @throws \RuntimeException
-     */
+    #[DataProvider('provider')]
     public function testOffsetUnderflow(string $text): void
     {
         $position = Position::fromOffset($text, \PHP_INT_MIN);
@@ -38,13 +27,7 @@ class ColumnsTestCase extends TestCase
         $this->assertSame(1, $position->getColumn());
     }
 
-    /**
-     * @dataProvider provider
-     * @param string $text
-     * @throws ExpectationFailedException
-     * @throws NotAccessibleException
-     * @throws \RuntimeException
-     */
+    #[DataProvider('provider')]
     public function testPosition(string $text): void
     {
         $column = 1;
