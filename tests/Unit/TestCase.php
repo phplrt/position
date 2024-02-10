@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Phplrt\Position\Tests\Unit;
 
-use PHPUnit\Framework\Attributes\Group;
 use Phplrt\Position\Tests\TestCase as BaseTestCase;
 
-#[Group('phplrt/position'), Group('unit')]
 abstract class TestCase extends BaseTestCase
 {
     public static function provider(): array

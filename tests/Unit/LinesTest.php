@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace Phplrt\Position\Tests\Unit;
 
 use Phplrt\Position\Position;
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Group;
 
-#[Group('phplrt/position'), Group('unit')]
 class LinesTest extends TestCase
 {
-    #[DataProvider('provider')]
+    /**
+     * @dataProvider provider
+     */
     public function testOffsetOverflow(string $text, int $lines): void
     {
         $position = Position::fromOffset($text, \PHP_INT_MAX);
@@ -19,7 +18,9 @@ class LinesTest extends TestCase
         $this->assertSame($lines, $position->getLine());
     }
 
-    #[DataProvider('provider')]
+    /**
+     * @dataProvider provider
+     */
     public function testOffsetUnderflow(string $text, int $lines): void
     {
         $position = Position::fromOffset($text, \PHP_INT_MIN);
@@ -27,7 +28,9 @@ class LinesTest extends TestCase
         $this->assertSame(1, $position->getLine());
     }
 
-    #[DataProvider('provider')]
+    /**
+     * @dataProvider provider
+     */
     public function testPosition(string $text): void
     {
         $line = 1;
