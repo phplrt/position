@@ -25,16 +25,23 @@ final class PositionFactory implements PositionFactoryInterface
      */
     protected const LINE_DELIMITER = "\n";
 
+    /**
+     * @var int<1, max>
+     *
+     * @psalm-readonly-allow-private-mutation
+     */
+    private int $chunkSize = self::DEFAULT_CHUNK_SIZE;
+
+    /**
+     * @param int<1, max> $chunkSize the chunk size used while non-blocking
+     *        reading the file inside the {@see \Fiber} context
+     */
     public function __construct(
-        /**
-         * The chunk size used while non-blocking reading the file inside
-         * the {@see \Fiber} context.
-         *
-         * @var int<1, max>
-         */
-        private readonly int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+        int $chunkSize = self::DEFAULT_CHUNK_SIZE
     ) {
         assert($chunkSize >= 1, 'Chunk size must be greater than 0');
+
+        $this->chunkSize = $chunkSize;
     }
 
     public function createAtStarting(): Position
@@ -123,6 +130,7 @@ final class PositionFactory implements PositionFactoryInterface
             ++$column;
         }
 
+        /** @psalm-suppress InvalidArgument : Column cannot be less than 1 */
         return new Position($offset, $line, $column);
     }
 
