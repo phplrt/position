@@ -18,7 +18,7 @@ class LinesTest extends TestCase
     }
 
     #[DataProvider('provider')]
-    public function testOffsetUnderflow(string $text): void
+    public function testOffsetUnderflow(string $text, int $lines): void
     {
         $position = Position::fromOffset($text, \PHP_INT_MIN);
 
