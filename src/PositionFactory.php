@@ -6,195 +6,231 @@ namespace Phplrt\Position;
 
 use Phplrt\Contracts\Position\PositionFactoryInterface;
 use Phplrt\Contracts\Position\PositionInterface;
-use Phplrt\Contracts\Source\FileInterface;
+use Phplrt\Contracts\Source\Exception\SourceExceptionInterface;
 use Phplrt\Contracts\Source\ReadableInterface;
-use Phplrt\Contracts\Source\SourceExceptionInterface;
-use Phplrt\Source\PreferContentReadingInterface;
+use Phplrt\Contracts\Source\ReadableStreamInterface;
+use Phplrt\Position\Exception\InvalidArgumentException;
+use Phplrt\Position\Exception\NotRewindableException;
 
-final class PositionFactory implements PositionFactoryInterface
+/**
+ * Calculates positions by counting the line delimiters the source holds.
+ *
+ * The source is read from its beginning, which a source that can be rewound
+ * survives untouched: it is left at the position it has been given at. The
+ * one that cannot be rewound is left at the end of the data that has been
+ * read out of it, and the one that has already given a part of its data away
+ * is not accepted at all.
+ */
+final readonly class PositionFactory implements PositionFactoryInterface
 {
     /**
-     * Default chunk size value.
+     * The number of bytes read at once by default.
      *
      * @var int<1, max>
      */
-    public const DEFAULT_CHUNK_SIZE = 65536;
+    public const int DEFAULT_CHUNK_SIZE = 65536;
 
     /**
      * @var non-empty-string
      */
-    protected const LINE_DELIMITER = "\n";
+    private const string LINE_DELIMITER = "\n";
 
-    public function __construct(
-        /**
-         * The chunk size used while non-blocking reading the file inside
-         * the {@see \Fiber} context.
-         *
-         * @var int<1, max>
-         */
-        private readonly int $chunkSize = self::DEFAULT_CHUNK_SIZE,
-    ) {
-        assert($chunkSize >= 1, 'Chunk size must be greater than 0');
-    }
+    /**
+     * The number of bytes read at once.
+     *
+     * @var int<1, max>
+     */
+    private int $chunkSize;
 
-    public function createAtStarting(): Position
+    /**
+     * @throws InvalidArgumentException When the number of bytes is not positive
+     */
+    public function __construct(int $chunkSize = self::DEFAULT_CHUNK_SIZE)
     {
-        return new Position(
-            PositionInterface::MIN_OFFSET,
-            PositionInterface::MIN_LINE,
-            PositionInterface::MIN_COLUMN,
-        );
+        if ($chunkSize < 1) {
+            throw InvalidArgumentException::becauseChunkSizeIsNotPositive($chunkSize);
+        }
+
+        $this->chunkSize = $chunkSize;
     }
 
     /**
-     * @throws SourceExceptionInterface
-     * @throws \FiberError
-     * @throws \Throwable
+     * @throws NotRewindableException When the source has already given a part
+     *         of its data away and cannot be rewound
+     * @throws SourceExceptionInterface may occur when it is not possible to
+     *         read source's data
      */
-    public function createAtEnding(ReadableInterface $source): Position
+    public function createFromOffset(ReadableInterface $source, int $offset): Position
     {
-        return self::createFromOffset($source, $this->getLength($source));
-    }
-
-    /**
-     * @throws SourceExceptionInterface
-     * @throws \FiberError
-     * @throws \Throwable
-     */
-    public function createFromOffset(
-        ReadableInterface $source,
-        int $offset = PositionInterface::MIN_OFFSET
-    ): Position {
-        if ($offset <= PositionInterface::MIN_OFFSET) {
-            return self::createAtStarting();
+        // The beginning of any source is known in advance, so there is
+        // nothing to read in order to find it out.
+        if ($offset <= 0) {
+            return new Position();
         }
 
-        /**
-         * Contains bool {@see true} value in case of fiber support available
-         * and the current method was called within the {@see \Fiber} or
-         * {@see false} instead.
-         */
-        $isFiberSupports = \PHP_MAJOR_VERSION >= 8
-            && \PHP_MINOR_VERSION >= 1
-            && \Fiber::getCurrent() !== null;
-
-        if ($offset > $length = $this->getLength($source)) {
-            $offset = $length;
-        }
-
-        $stream = $source->getStream();
-
-        // Resulting number of lines in read data.
-        $line = 1;
-
-        // Required number of bytes to be read.
-        $expected = $offset;
-
-        if ($isFiberSupports) {
-            \stream_set_blocking($stream, false);
-            \Fiber::suspend();
-        }
-
-        do {
-            // Read chunk from source to buffer.
-            $chunk = (string) \fread($stream, \min($expected, $this->chunkSize));
-
-            // Increase the number of lines by the value of the occurrences of
-            // the line breaks in this chunk.
-            $line += \substr_count($chunk, self::LINE_DELIMITER);
-
-            if ($isFiberSupports) {
-                \Fiber::suspend();
-            }
-
-            // Decrement the value of the data required to be read ($expected)
-            // by the value of the data already read ($chunk size).
-        } while (($expected -= \strlen($chunk)) > 0);
-
-        // Find the last occurrence of line break in the string and reduce the
-        // length of the string by this value.
-        //
-        // The result will be the size of the string after the last occurrence
-        // of a line break.
-        $column = \strlen($chunk) - (int) \strrpos($chunk, self::LINE_DELIMITER);
-
-        // The first line does not contain any line breaks.
-        if ($line === 1) {
-            ++$column;
-        }
-
-        return new Position($offset, $line, $column);
-    }
-
-    /**
-     * @throws SourceExceptionInterface
-     */
-    public function createFromPosition(
-        ReadableInterface $source,
-        int $line = PositionInterface::MIN_LINE,
-        int $column = PositionInterface::MIN_COLUMN
-    ): Position {
-        $line = \max(PositionInterface::MIN_LINE, $line);
-        $column = \max(PositionInterface::MIN_COLUMN, $column);
-
-        if ($line === PositionInterface::MIN_LINE
-            && $column === PositionInterface::MIN_COLUMN) {
-            return self::createAtStarting();
-        }
-
-        $stream = $source->getStream();
-        $offset = $cursor = 0;
-
-        //
-        // Calculate the number of bytes that the transmitted
-        // number of lines takes.
-        //
-        while (!\feof($stream) && $cursor++ + 1 < $line) {
-            $offset += \strlen((string) \fgets($stream));
-        }
-
-        //
-        // In the case that the column is not the first one, then
-        // we calculate the number of bytes contained in the very
-        // last source line not exceeding the size of the transmitted
-        // column.
-        //
-        if ($column !== 1) {
-            $last = (string) @\fread($stream, $column - 1);
-            $lines = \explode(self::LINE_DELIMITER, $last);
-            $offset += $column = \strlen(\reset($lines));
-        }
-
-        return new Position($offset, \max(1, $cursor), \max(1, $column));
+        return $this->calculatePosition($source, $offset);
     }
 
     /**
      * @return int<0, max>
-     * @throws SourceExceptionInterface
+     * @throws NotRewindableException When the source has already given a part
+     *         of its data away and cannot be rewound
+     * @throws SourceExceptionInterface may occur when it is not possible to
+     *         read source's data
      */
-    private function getLength(ReadableInterface $source): int
+    public function createOffsetFromPosition(ReadableInterface $source, PositionInterface $position): int
     {
-        if ($source instanceof FileInterface && \is_file($source->getPathname())) {
-            /** @var int<0, max> */
-            return \filesize($source->getPathname());
+        $line = \max(PositionInterface::MIN_LINE, $position->line);
+        $column = \max(PositionInterface::MIN_COLUMN, $position->column);
+
+        if ($line === PositionInterface::MIN_LINE && $column === PositionInterface::MIN_COLUMN) {
+            return 0;
         }
 
-        // Note that "PreferContentReadingInterface" interface may not exist.
-        if ($source instanceof PreferContentReadingInterface) {
-            return \strlen($source->getContents());
+        // The offset of the beginning of the chunk being read.
+        $base = 0;
+
+        // The line the reading is in.
+        $current = PositionInterface::MIN_LINE;
+
+        // The number of bytes left to be walked along the line the position
+        // points at.
+        $remaining = $column - PositionInterface::MIN_COLUMN;
+
+        foreach ($this->read($source, \PHP_INT_MAX) as $chunk) {
+            $length = \strlen($chunk);
+            $index = 0;
+
+            while ($current < $line) {
+                $delimiter = \strpos($chunk, self::LINE_DELIMITER, $index);
+
+                if ($delimiter === false) {
+                    $index = $length;
+
+                    break;
+                }
+
+                ++$current;
+                $index = $delimiter + 1;
+            }
+
+            if ($current === $line && $remaining > 0 && $index < $length) {
+                // A column pointing beyond the end of its line is not walked
+                // any further than the line itself goes.
+                $rest = \substr($chunk, $index, $remaining);
+                $delimiter = \strpos($rest, self::LINE_DELIMITER);
+
+                if ($delimiter !== false) {
+                    return $base + $index + $delimiter;
+                }
+
+                $index += \strlen($rest);
+                $remaining -= \strlen($rest);
+            }
+
+            if ($current === $line && $remaining === 0) {
+                return $base + $index;
+            }
+
+            $base += $length;
         }
 
-        $stream = $source->getStream();
+        return $base;
+    }
 
-        $meta = \stream_get_meta_data($stream);
-        if (\stream_is_local($meta['uri']) && \is_readable($meta['uri'])) {
-            /** @var int<0, max> */
-            return \filesize($meta['uri']);
+    /**
+     * Reads the source from its beginning up to the given number of bytes,
+     * or up to the end of it in case there is less data than that.
+     *
+     * @param int<1, max> $limit
+     * @throws NotRewindableException When the source has already given a part
+     *         of its data away and cannot be rewound
+     * @throws SourceExceptionInterface may occur when it is not possible to
+     *         read source's data
+     */
+    private function calculatePosition(ReadableInterface $source, int $limit): Position
+    {
+        $line = PositionInterface::MIN_LINE;
+        $column = PositionInterface::MIN_COLUMN;
+
+        foreach ($this->read($source, $limit) as $chunk) {
+            $delimiter = \strrpos($chunk, self::LINE_DELIMITER);
+
+            if ($delimiter === false) {
+                $column += \strlen($chunk);
+            } else {
+                $line += \substr_count($chunk, self::LINE_DELIMITER);
+                $column = \strlen($chunk) - $delimiter;
+            }
         }
 
-        \fseek($stream, 0, \SEEK_END);
+        return new Position($line, \max(PositionInterface::MIN_COLUMN, $column));
+    }
 
-        /** @var int<0, max> */
-        return \ftell($stream);
+    /**
+     * Returns the data of the source in chunks, starting at the beginning of
+     * it and stopping at the given number of bytes or at the end of the
+     * source, whichever comes first.
+     *
+     * @param int<1, max> $limit
+     * @return iterable<mixed, string>
+     * @throws NotRewindableException When the source has already given a part
+     *         of its data away and cannot be rewound
+     * @throws SourceExceptionInterface may occur when it is not possible to
+     *         read source's data
+     */
+    private function read(ReadableInterface $source, int $limit): iterable
+    {
+        if ($source->isSeekable) {
+            return $this->readRewound($source, $limit);
+        }
+
+        if ($source->offset !== 0) {
+            throw NotRewindableException::becauseSourceIsConsumed($source->offset);
+        }
+
+        return $this->readForward($source, $limit);
+    }
+
+    /**
+     * Reads the source from its beginning and gives it back at the position
+     * it has been taken at.
+     *
+     * @param int<1, max> $limit
+     * @return iterable<mixed, string>
+     * @throws SourceExceptionInterface may occur when it is not possible to
+     *         read source's data
+     */
+    private function readRewound(ReadableInterface $source, int $limit): iterable
+    {
+        $restore = $source->offset;
+        $source->offset = 0;
+
+        try {
+            yield from $this->readForward($source, $limit);
+        } finally {
+            $source->offset = $restore;
+        }
+    }
+
+    /**
+     * @param int<1, max> $limit
+     * @return iterable<mixed, string>
+     * @throws SourceExceptionInterface may occur when it is not possible to
+     *         read source's data
+     */
+    private function readForward(ReadableStreamInterface $source, int $limit): iterable
+    {
+        // Nothing beyond the limit is taken out of the source, so the last
+        // chunk is the one the limit falls into.
+        for ($rest = $limit; $rest >= 1; $rest -= \strlen($chunk)) {
+            $chunk = $source->read(\min($this->chunkSize, $rest));
+
+            if ($chunk === '') {
+                break;
+            }
+
+            yield $chunk;
+        }
     }
 }
